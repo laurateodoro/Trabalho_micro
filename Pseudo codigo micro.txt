@@ -1,0 +1,18 @@
+#define F_CPU 16000000UL
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
+//Parte Paulo
+
+
+int main(void) {
+    // Configurações iniciais virão aqui
+    while (1) {
+        // Loop principal Parte da Laura
+    }
+    return 0;
+}
