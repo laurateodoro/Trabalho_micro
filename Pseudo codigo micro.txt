@@ -8,6 +8,8 @@
 
 #define INTERVALO_MEDICAO 1000 //Medição a cada 1 segundo
 #define TAMANHO_FILTRO 4 //FILTRO PARA MEDIÇÃO ESTÁVEL
+#define PULSOS_POR_VOLTA 2   //Sensor de rotação
+
 
 // CONTROLE DO MOTOR (PWM)
 void configurar_motor(void) {
@@ -187,4 +189,48 @@ int main(void) {
                 memset(comando, 0, sizeof(comando));
             }
         }
-   
+   // CÁLCULO E FILTRAGEM DO RPM
+        
+        if (flag_medir_rpm) {
+            flag_medir_rpm = 0;
+            
+            //cálculo do RPM
+            rpm_medido = (pulsos_ultimo_periodo * 60UL) / PULSOS_POR_VOLTA;
+            rpm_medido = filtrar_medida_rpm(rpm_medido);
+            
+            //Envio periódico de informações
+            static uint8_t contador_exibicao = 0;
+            if (++contador_exibicao >= 1) {  // A cada segundo
+                contador_exibicao = 0;
+                enviar_mensagem("PWM: ");
+                enviar_numero(velocidade_atual);     
+                enviar_mensagem("% | RPM: ");
+                enviar_numero(rpm_medido);        
+                enviar_mensagem("\r\n");
+            }
+        }
+        
+        //  CONTROLE SUAVE DE VELOCIDADE
+        static uint16_t temporizador_rampa = 0;
+        
+        if (temporizador_rampa >= 50) {  // A cada 50ms
+            temporizador_rampa = 0;
+            
+            //Controle de aceleração (não muda bruscamente)
+            if (velocidade_atual < velocidade_desejada) {
+                velocidade_atual++;  // Acelera gradualmente
+            } else if (velocidade_atual > velocidade_desejada) {
+                velocidade_atual--;  // Desacelera gradualmente
+            }
+            
+            // Aplica nova velocidade ao motor
+            ajustar_velocidade_motor(velocidade_atual);
+        }
+        
+        // Delay principal do loop
+        _delay_ms(10);
+        temporizador_rampa += 10;
+    }
+	
+	return 0;
+}
