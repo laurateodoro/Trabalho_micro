@@ -66,6 +66,7 @@ ISR(TIMER2_COMPA_vect) {
     }
 }
 
+
 //COMUNICAÇÃO SERIAL
 void iniciar_comunicacao_serial(void) {
     UBRR0H = 0;
@@ -75,4 +76,18 @@ void iniciar_comunicacao_serial(void) {
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //8 bits, 1 stop bit
 }
 
+void enviar_mensagem(const char *texto) {
+    //Envia informações pela porta serial
+    while (*texto) {
+        while (!(UCSR0A & (1 << UDRE0)));  // Aguarda buffer vazio
+        UDR0 = *texto++;                    // Envia caractere
+    }
+}
+
+void enviar_numero(uint16_t numero) {
+    //Informação legível com precisão
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%u", numero);
+    enviar_mensagem(buffer);
+}
 
