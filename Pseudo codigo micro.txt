@@ -124,3 +124,26 @@ uint16_t filtrar_medida_rpm(uint16_t nova_medida) {
     return (uint16_t)(soma / elementos);
 }
 
+//PROGRAMA PRINCIPAL 
+int main(void) {
+    configurar_motor();              //motor PWM
+    configurar_sensor_rotacao();     //Sensor RPM
+    iniciar_temporizador_medicao();  //Temporizador para medições
+    iniciar_comunicacao_serial();    //Comunicação serial
+    sei();                           //Habilita interrupções globais
+
+    
+    //VARIÁVEIS DE CONTROLE
+    uint8_t velocidade_atual = 0;    //velocidade atual do motor
+    uint8_t velocidade_desejada = 0; //velocidade solicitada pelo usuário
+    uint16_t rpm_medido = 0;         //RPM atual medido
+    uint8_t aceleracao_taxa = 5;     //taxa de aceleração
+
+    //BUFFER PARA COMANDOS SERIAL
+    char comando[10] = {0};
+    uint8_t indice_comando = 0;
+
+    //MENSAGEM INICIAL
+    enviar_mensagem("Sistema de Controle de Motor DC\r\n");
+    enviar_mensagem("Comandos: 0-100 (velocidade%) ou STOP\r\n");
+    enviar_mensagem("====================================\r\n");
