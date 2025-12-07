@@ -6,13 +6,13 @@
 #include <string.h>
 #include <stdio.h>
 
-#define INTERVALO_MEDICAO 1000 //Medição a cada 1 segundo
+#define INTERVALOdMEDICAO 1000 //Medição a cada 1 segundo
 #define TAMANHO_FILTRO 4 //FILTRO PARA MEDIÇÃO ESTÁVEL
 #define PULSOS_POR_VOLTA 2   //Sensor de rotação
 
 
 // CONTROLE DO MOTOR (PWM)
-void configurar_motor(void) {
+void configuraMotor(void) {
 
     DDRB |= (1 << PB1);                    // PB1 = Arduino D9 (saída PWM)
     TCCR1A = (1 << WGM10) | (1 << COM1A1); // Fast PWM 8-bit, não-invertido  256
@@ -20,26 +20,26 @@ void configurar_motor(void) {
     OCR1A = 0;                             // Duty inicial 0% (motor parado)
 }
 
-void ajustar_velocidade_motor(uint8_t velocidade) {
+void configuraVelMotor(uint8_t vel) {
     //define razão de ciclo PWM de 0 a 100%
     //proteção contra valores inválidos
-    if (velocidade > 100) velocidade = 100; //limita a 100%
-    OCR1A = (velocidade * 255UL) / 100;     //converte % para valor PWM
+    if (vel > 100) vel = 100; //limita a 100%
+    OCR1A = (vel * 255) / 100;     //converte % para valor PWM
 }
 
 // SENSOR DE ROTAÇÃO (RPM) 
-volatile uint32_t total_pulsos = 0;           // Contador de pulsos
+volatile uint32_t totPulso = 0;           // Contador de pulsos
 volatile uint8_t flag_medir_rpm = 0;          // Flag para cálculo do RPM
 volatile uint16_t pulsos_ultimo_periodo = 0;  // Pulsos no último intervalo
 
 ISR(INT1_vect) {
 
     // Interrupção do sensor - PD3 (INT1)
-    total_pulsos++;  // Incrementa a cada pulso do sensor
+    totPulso++;  // Incrementa a cada pulso do sensor
 }
 
-void configurar_sensor_rotacao(void) {
-  //Configura sensor no pino PD3 (Arduino D3)
+void configSensorRotacao(void) {
+  //Configura sensor no pino PD3 
     DDRD &= ~(1 << PD3);     // PD3 como entrada
     PORTD |= (1 << PD3);     // Ativa pull-up interno
     EICRA |= (1 << ISC11);   // Interrupção na borda de descida
@@ -48,7 +48,7 @@ void configurar_sensor_rotacao(void) {
 }
 
 // TEMPORIZADOR PARA MEDIÇÃO - 
-void iniciar_temporizador_medicao(void) {
+void timerMedicao(void) {
     //Timer para medição periódica (1 segundo)
     TCCR2A = (1 << WGM21);    // Modo CTC
     TCCR2B = (1 << CS22);     // Prescaler 64
@@ -56,22 +56,22 @@ void iniciar_temporizador_medicao(void) {
     TIMSK2 |= (1 << OCIE2A);  // Habilita interrupção
 }
 
-volatile uint16_t contador_tempo = 0;
+volatile uint16_t contTemp = 0;
 
 ISR(TIMER2_COMPA_vect) {
    //Periodicidade de 1 segundo para envio de informações
-    contador_tempo++;
-    if (contador_tempo >= INTERVALO_MEDICAO) {  // 1000ms = 1 segundo
-        contador_tempo = 0;
-        pulsos_ultimo_periodo = total_pulsos;  // Salva pulsos do último segundo
-        total_pulsos = 0;                      // Zera para próximo segundo
+    contTemp++;
+    if (contTemp >= INTERVALOdMEDICAO) {  // 1000ms = 1 segundo
+        contTemp = 0;
+        pulsos_ultimo_periodo = totPulso;  // Salva pulsos do último segundo
+        totPulso = 0;                      // Zera para próximo segundo
         flag_medir_rpm = 1;                    // Sinaliza cálculo do RPM
     }
 }
 
 
 //COMUNICAÇÃO SERIAL
-void iniciar_comunicacao_serial(void) {
+void configuraComunicaSerial(void) {
     UBRR0H = 0;
     UBRR0L = 103;  //9600 bauds para 16MHz
                    //Cálculo: (16000000 / (16 * 9600)) - 1 = 103
@@ -79,28 +79,28 @@ void iniciar_comunicacao_serial(void) {
     UCSR0C = (1 << UCSZ01) | (1 << UCSZ00); //8 bits, 1 stop bit
 }
 
-void enviar_mensagem(const char *texto) {
+void enviaMensagem(const char *texto) {
     //Envia informações pela porta serial
     while (*texto) {
         while (!(UCSR0A & (1 << UDRE0)));  // Aguarda buffer vazio
-        UDR0 = *texto++;                    // Envia caractere
+        UDR0 = *texto++;                    
     }
 }
 
-void enviar_numero(uint16_t numero) {
+void tranformaNum(uint16_t numero) {
     //Informação legível com precisão
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%u", numero);
-    enviar_mensagem(buffer);
+    enviaMensagem(buffer);
 }
 
 
-uint8_t caractere_disponivel(void) {
+uint8_t confirmaDados(void) {
     return (UCSR0A & (1 << RXC0));  // Verifica se há dado recebido
 }
 
-char receber_caractere(void) {
-    while (!caractere_disponivel());
+char recebeDados(void) {
+    while (!confirmaDados());
     return UDR0;  // Lê caractere recebido
 }
 
@@ -117,7 +117,13 @@ uint16_t filtrar_medida_rpm(uint16_t nova_medida) {
     if (!cheio && indice == 0) cheio = 1;
     
     uint32_t soma = 0;
-    uint8_t elementos = cheio ? TAMANHO_FILTRO : indice;
+    uint8_t elementos;
+
+    if (cheio) {
+      elementos = TAMANHO_FILTRO;
+      } else {
+    elementos = indice;
+     }
     
     for (uint8_t i = 0; i < elementos; i++) {
         soma += historico_rpm[i];
@@ -128,16 +134,16 @@ uint16_t filtrar_medida_rpm(uint16_t nova_medida) {
 
 //PROGRAMA PRINCIPAL 
 int main(void) {
-    configurar_motor();              //motor PWM
-    configurar_sensor_rotacao();     //Sensor RPM
-    iniciar_temporizador_medicao();  //Temporizador para medições
-    iniciar_comunicacao_serial();    //Comunicação serial
+    configuraMotor();              //motor PWM
+    configSensorRotacao();     //Sensor RPM
+    timerMedicao();  //Temporizador para medições
+    configuraComunicaSerial();    //Comunicação serial
     sei();                           //Habilita interrupções globais
 
     
     //VARIÁVEIS DE CONTROLE
-    uint8_t velocidade_atual = 0;    //velocidade atual do motor
-    uint8_t velocidade_desejada = 0; //velocidade solicitada pelo usuário
+    uint8_t vel_atual = 0;    //vel atual do motor
+    uint8_t vel_desejada = 0; //vel solicitada pelo usuário
     uint16_t rpm_medido = 0;         //RPM atual medido
     uint8_t aceleracao_taxa = 5;     //taxa de aceleração
 
@@ -146,14 +152,14 @@ int main(void) {
     uint8_t indice_comando = 0;
 
     //MENSAGEM INICIAL
-    enviar_mensagem("Sistema de Controle de Motor DC\r\n");
-    enviar_mensagem("Comandos: 0-100 (velocidade%) ou STOP\r\n");
-    enviar_mensagem("====================================\r\n");
+    enviaMensagem("Sistema de Controle de Motor DC\r\n");
+    enviaMensagem("Comandos: 0-100 (vel%) ou STOP\r\n");
+    enviaMensagem("====================================\r\n");
 
   while (1) {
         //PROCESSAMENTO DE COMANDOS SERIAL
-        if (caractere_disponivel()) {
-            char entrada = receber_caractere();
+        if (confirmaDados()) {
+            char entrada = recebeDados();
             
             //Receber comandos em texto
             if (entrada >= '0' && entrada <= '9' && indice_comando < 9) {
@@ -161,8 +167,8 @@ int main(void) {
             }
             //comando para parada
             else if ((entrada == 'S' || entrada == 's') && indice_comando == 0) {
-                velocidade_desejada = 0;
-                enviar_mensagem("Motor PARADO\r\n");
+                vel_desejada = 0;
+                enviaMensagem("Motor PARADO\r\n");
             }
             // Processa comando numérico quando recebe ENTER
             else if ((entrada == '\r' || entrada == '\n') && indice_comando > 0) {
@@ -171,12 +177,12 @@ int main(void) {
                 
                 // Tratamento de erros
                 if (valor <= 100) {
-                    velocidade_desejada = valor;
-                    enviar_mensagem("Velocidade ajustada para ");
-                    enviar_numero(valor);
-                    enviar_mensagem("%\r\n");
+                    vel_desejada = valor;
+                    enviaMensagem("vel ajustada para ");
+                    tranformaNum(valor);
+                    enviaMensagem("%\r\n");
                 } else {
-                    enviar_mensagem("ERRO: Velocidade deve ser 0-100%\r\n");
+                    enviaMensagem("ERRO: vel deve ser 0-100%\r\n");
                 }
                 
                 indice_comando = 0;
@@ -184,7 +190,7 @@ int main(void) {
             }
             ///Comando inválido
             else if (entrada != '\r' && entrada != '\n') {
-                enviar_mensagem("ERRO: Comando invalido\r\n");
+                enviaMensagem("ERRO: Comando invalido\r\n");
                 indice_comando = 0;
                 memset(comando, 0, sizeof(comando));
             }
@@ -202,29 +208,29 @@ int main(void) {
             static uint8_t contador_exibicao = 0;
             if (++contador_exibicao >= 1) {  // A cada segundo
                 contador_exibicao = 0;
-                enviar_mensagem("PWM: ");
-                enviar_numero(velocidade_atual);     
-                enviar_mensagem("% | RPM: ");
-                enviar_numero(rpm_medido);        
-                enviar_mensagem("\r\n");
+                enviaMensagem("PWM: ");
+                tranformaNum(vel_atual);     
+                enviaMensagem("% | RPM: ");
+                tranformaNum(rpm_medido);        
+                enviaMensagem("\r\n");
             }
         }
         
-        //  CONTROLE SUAVE DE VELOCIDADE
+        //  CONTROLE SUAVE DE vel
         static uint16_t temporizador_rampa = 0;
         
         if (temporizador_rampa >= 50) {  // A cada 50ms
             temporizador_rampa = 0;
             
             //Controle de aceleração (não muda bruscamente)
-            if (velocidade_atual < velocidade_desejada) {
-                velocidade_atual++;  // Acelera gradualmente
-            } else if (velocidade_atual > velocidade_desejada) {
-                velocidade_atual--;  // Desacelera gradualmente
+            if (vel_atual < vel_desejada) {
+                vel_atual++;  // Acelera gradualmente
+            } else if (vel_atual > vel_desejada) {
+                vel_atual--;  // Desacelera gradualmente
             }
             
-            // Aplica nova velocidade ao motor
-            ajustar_velocidade_motor(velocidade_atual);
+            // Aplica nova vel ao motor
+            configuraVelMotor(vel_atual);
         }
         
         // Delay principal do loop
