@@ -9,7 +9,7 @@
 
 // CONTROLE DO MOTOR (PWM)
 void configurar_motor(void) {
-    // REQUISITO 1: Módulo PWM para controlar velocidade
+    
     DDRB |= (1 << PB1);                    // PB1 = Arduino D9 (saída PWM)
     TCCR1A = (1 << WGM10) | (1 << COM1A1); // Fast PWM 8-bit, não-invertido  256
     TCCR1B = (1 << WGM12) | (1 << CS11);   // Prescaler 8  f +- 7.8khz
@@ -22,6 +22,29 @@ void ajustar_velocidade_motor(uint8_t velocidade) {
     if (velocidade > 100) velocidade = 100; //limita a 100%
     OCR1A = (velocidade * 255UL) / 100;     //converte % para valor PWM
 }
+
+// SENSOR DE ROTAÇÃO (RPM) 
+volatile uint32_t total_pulsos = 0;           // Contador de pulsos
+volatile uint8_t flag_medir_rpm = 0;          // Flag para cálculo do RPM
+volatile uint16_t pulsos_ultimo_periodo = 0;  // Pulsos no último intervalo
+
+ISR(INT1_vect) {
+   
+    // Interrupção do sensor - PD3 (INT1)
+    total_pulsos++;  // Incrementa a cada pulso do sensor
+}
+
+void configurar_sensor_rotacao(void) {
+  //Configura sensor no pino PD3 (Arduino D3)
+    DDRD &= ~(1 << PD3);     // PD3 como entrada
+    PORTD |= (1 << PD3);     // Ativa pull-up interno
+    EICRA |= (1 << ISC11);   // Interrupção na borda de descida
+    EICRA &= ~(1 << ISC10);
+    EIMSK |= (1 << INT1);    // Habilita INT1
+}
+
+
+
 
 
 int main(void) {
