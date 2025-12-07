@@ -7,6 +7,7 @@
 #include <stdio.h>
 
 #define INTERVALO_MEDICAO 1000 //Medição a cada 1 segundo
+#define TAMANHO_FILTRO 4 //FILTRO PARA MEDIÇÃO ESTÁVEL
 
 // CONTROLE DO MOTOR (PWM)
 void configurar_motor(void) {
@@ -89,5 +90,37 @@ void enviar_numero(uint16_t numero) {
     char buffer[10];
     snprintf(buffer, sizeof(buffer), "%u", numero);
     enviar_mensagem(buffer);
+}
+
+
+uint8_t caractere_disponivel(void) {
+    return (UCSR0A & (1 << RXC0));  // Verifica se há dado recebido
+}
+
+char receber_caractere(void) {
+    while (!caractere_disponivel());
+    return UDR0;  // Lê caractere recebido
+}
+
+// FILTRO DE MÉDIA MÓVEL
+uint16_t filtrar_medida_rpm(uint16_t nova_medida) {
+    // Filtro para medição mais estável do RPM
+    static uint16_t historico_rpm[TAMANHO_FILTRO] = {0};
+    static uint8_t indice = 0;
+    static uint8_t cheio = 0;
+    
+    historico_rpm[indice] = nova_medida;
+    indice = (indice + 1) % TAMANHO_FILTRO;
+    
+    if (!cheio && indice == 0) cheio = 1;
+    
+    uint32_t soma = 0;
+    uint8_t elementos = cheio ? TAMANHO_FILTRO : indice;
+    
+    for (uint8_t i = 0; i < elementos; i++) {
+        soma += historico_rpm[i];
+    }
+    
+    return (uint16_t)(soma / elementos);
 }
 
