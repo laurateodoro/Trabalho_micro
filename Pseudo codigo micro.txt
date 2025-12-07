@@ -43,7 +43,27 @@ void configurar_sensor_rotacao(void) {
     EIMSK |= (1 << INT1);    // Habilita INT1
 }
 
+// TEMPORIZADOR PARA MEDIÇÃO - 
+void iniciar_temporizador_medicao(void) {
+    //Timer para medição periódica (1 segundo)
+    TCCR2A = (1 << WGM21);    // Modo CTC
+    TCCR2B = (1 << CS22);     // Prescaler 64
+    OCR2A = 249;              // 1ms (16MHz/64/250)
+    TIMSK2 |= (1 << OCIE2A);  // Habilita interrupção
+}
 
+volatile uint16_t contador_tempo = 0;
+
+ISR(TIMER2_COMPA_vect) {
+   //Periodicidade de 1 segundo para envio de informações
+    contador_tempo++;
+    if (contador_tempo >= INTERVALO_MEDICAO) {  // 1000ms = 1 segundo
+        contador_tempo = 0;
+        pulsos_ultimo_periodo = total_pulsos;  // Salva pulsos do último segundo
+        total_pulsos = 0;                      // Zera para próximo segundo
+        flag_medir_rpm = 1;                    // Sinaliza cálculo do RPM
+    }
+}
 
 
 
