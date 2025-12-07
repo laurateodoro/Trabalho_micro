@@ -6,7 +6,6 @@
 #include <string.h>
 #include <stdio.h>
 
-//Parte Paulo
 
 // CONTROLE DO MOTOR (PWM)
 void configurar_motor(void) {
@@ -17,13 +16,18 @@ void configurar_motor(void) {
     OCR1A = 0;                             // Duty inicial 0% (motor parado)
 }
 
-
+void ajustar_velocidade_motor(uint8_t velocidade) {
+    //define razão de ciclo PWM de 0 a 100%
+    //proteção contra valores inválidos
+    if (velocidade > 100) velocidade = 100; //limita a 100%
+    OCR1A = (velocidade * 255UL) / 100;     //converte % para valor PWM
+}
 
 
 int main(void) {
-    // Configurações iniciais virão aqui
+
     while (1) {
-        // Loop principal Parte da Laura
+
     }
     return 0;
 }
