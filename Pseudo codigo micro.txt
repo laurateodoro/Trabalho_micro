@@ -8,6 +8,17 @@
 
 //Parte Paulo
 
+// CONTROLE DO MOTOR (PWM)
+void configurar_motor(void) {
+    // REQUISITO 1: Módulo PWM para controlar velocidade
+    DDRB |= (1 << PB1);                    // PB1 = Arduino D9 (saída PWM)
+    TCCR1A = (1 << WGM10) | (1 << COM1A1); // Fast PWM 8-bit, não-invertido  256
+    TCCR1B = (1 << WGM12) | (1 << CS11);   // Prescaler 8  f +- 7.8khz
+    OCR1A = 0;                             // Duty inicial 0% (motor parado)
+}
+
+
+
 
 int main(void) {
     // Configurações iniciais virão aqui
