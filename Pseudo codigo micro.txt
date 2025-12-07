@@ -147,3 +147,44 @@ int main(void) {
     enviar_mensagem("Sistema de Controle de Motor DC\r\n");
     enviar_mensagem("Comandos: 0-100 (velocidade%) ou STOP\r\n");
     enviar_mensagem("====================================\r\n");
+
+  while (1) {
+        //PROCESSAMENTO DE COMANDOS SERIAL
+        if (caractere_disponivel()) {
+            char entrada = receber_caractere();
+            
+            //Receber comandos em texto
+            if (entrada >= '0' && entrada <= '9' && indice_comando < 9) {
+                comando[indice_comando++] = entrada;  // Acumula dígitos
+            }
+            //comando para parada
+            else if ((entrada == 'S' || entrada == 's') && indice_comando == 0) {
+                velocidade_desejada = 0;
+                enviar_mensagem("Motor PARADO\r\n");
+            }
+            // Processa comando numérico quando recebe ENTER
+            else if ((entrada == '\r' || entrada == '\n') && indice_comando > 0) {
+                comando[indice_comando] = '\0';
+                uint16_t valor = atoi(comando);
+                
+                // Tratamento de erros
+                if (valor <= 100) {
+                    velocidade_desejada = valor;
+                    enviar_mensagem("Velocidade ajustada para ");
+                    enviar_numero(valor);
+                    enviar_mensagem("%\r\n");
+                } else {
+                    enviar_mensagem("ERRO: Velocidade deve ser 0-100%\r\n");
+                }
+                
+                indice_comando = 0;
+                memset(comando, 0, sizeof(comando));
+            }
+            ///Comando inválido
+            else if (entrada != '\r' && entrada != '\n') {
+                enviar_mensagem("ERRO: Comando invalido\r\n");
+                indice_comando = 0;
+                memset(comando, 0, sizeof(comando));
+            }
+        }
+   
