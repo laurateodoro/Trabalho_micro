@@ -8,12 +8,11 @@
 
 #define INTERVALOdMEDICAO 1000 //Medição a cada 1 segundo
 #define TAMANHO_FILTRO 4 //FILTRO PARA MEDIÇÃO ESTÁVEL
-#define PULSOS_POR_VOLTA 2   //Sensor de rotação
+#define PULSOS_POR_VOLTA 1  //Sensor de rotação
 
 
-// CONTROLE DO MOTOR (PWM)
+//CONTROLE DO MOTOR (PWM) - responsável pela configuração de velocidade do motor
 void configuraMotor(void) {
-
     DDRB |= (1 << PB1);                    // PB1 = Arduino D9 (saída PWM)
     TCCR1A = (1 << WGM10) | (1 << COM1A1); // Fast PWM 8-bit, não-invertido  256
     TCCR1B = (1 << WGM12) | (1 << CS11);   // Prescaler 8  f +- 7.8khz
@@ -142,14 +141,14 @@ int main(void) {
 
     
     //VARIÁVEIS DE CONTROLE
-    uint8_t vel_atual = 0;    //vel atual do motor
-    uint8_t vel_desejada = 0; //vel solicitada pelo usuário
-    uint16_t rpm_medido = 0;         //RPM atual medido
-    uint8_t aceleracao_taxa = 5;     //taxa de aceleração
+    uint8_t vel_atual = 0;           //armazena velocidade atual do motor que está sendo aplicada via PWM
+    uint8_t vel_desejada = 0;        //armazena a velocidade desejada pelo usuario (set point)
+    uint16_t rpm_medido = 0;         //contém o valor das rotações calculado a partir dos pulsos do sensor
+    uint8_t aceleracao_taxa = 20;     //suavidade da aceleração, evitando transições bruscas, 20% por segundo (1% a cada 50ms)
 
     //BUFFER PARA COMANDOS SERIAL
-    char comando[10] = {0};
-    uint8_t indice_comando = 0;
+    char comando[10] = {0};         //10 espaços livres todos zerados inicialmente
+    uint8_t indice_comando = 0;     //contador que aponta para o próximo compartimento vazio
 
     //MENSAGEM INICIAL
     enviaMensagem("Sistema de Controle de Motor DC\r\n");
@@ -158,75 +157,78 @@ int main(void) {
 
   while (1) {
         //PROCESSAMENTO DE COMANDOS SERIAL
-        if (confirmaDados()) {
-            char entrada = recebeDados();
+        if (confirmaDados()) {    //se função verificar que algo foi escrito
+            char entrada = recebeDados(); //a variável char tem atribuida o valor de recebeDados
             
             //Receber comandos em texto
-            if (entrada >= '0' && entrada <= '9' && indice_comando < 9) {
-                comando[indice_comando++] = entrada;  // Acumula dígitos
+            if (entrada >= '0' && entrada <= '9' && indice_comando < 9) {  //se o usuario digitar entre 0-9 e ainda couber no buffer
+                comando[indice_comando++] = entrada;  //número guardado e preparado o proximo espaço
             }
             //comando para parada
-            else if ((entrada == 'S' || entrada == 's') && indice_comando == 0) {
+            else if ((entrada == 'S' || entrada == 's') && indice_comando == 0) { 
                 vel_desejada = 0;
                 enviaMensagem("Motor PARADO\r\n");
             }
-            // Processa comando numérico quando recebe ENTER
-            else if ((entrada == '\r' || entrada == '\n') && indice_comando > 0) {
-                comando[indice_comando] = '\0';
-                uint16_t valor = atoi(comando);
+
+            //Processa comando numérico quando recebe ENTER
+            else if ((entrada == '\r' || entrada == '\n') && indice_comando > 0) { //Se chegou caractere de ENTER E tem pelo menos 1 dígito no buffer
+                comando[indice_comando] = '\0';     //o próximo comando adiciona o terminador nulo pra marcar o final
+                uint16_t valor = atoi(comando);     //ocorre a conversão de string para um numero inteiro
                 
                 // Tratamento de erros
-                if (valor <= 100) {
+                if (valor >= 0 && valor <= 100) {  //se a conversão atoi for um valor menor ou igual a 100 a velocidade desejada é ajustada para esse valor
                     vel_desejada = valor;
                     enviaMensagem("vel ajustada para ");
                     tranformaNum(valor);
                     enviaMensagem("%\r\n");
-                } else {
+                }
+
+                else {
                     enviaMensagem("ERRO: vel deve ser 0-100%\r\n");
                 }
                 
-                indice_comando = 0;
-                memset(comando, 0, sizeof(comando));
+                indice_comando = 0;  //volta o ponteiro pro início
+                memset(comando, 0, sizeof(comando));   //todas as posições são zeradas
             }
             ///Comando inválido
-            else if (entrada != '\r' && entrada != '\n') {
-                enviaMensagem("ERRO: Comando invalido\r\n");
-                indice_comando = 0;
-                memset(comando, 0, sizeof(comando));
+            else if (entrada != '\r' && entrada != '\n') { //se for informado qualquer caractere nao especificado
+                enviaMensagem("ERRO: Comando invalido\r\n"); //é mostado a mensagem de erro
+                indice_comando = 0;  //o ponteiro volta pro inicio
+                memset(comando, 0, sizeof(comando));  //e o buffer é completamente limpo
             }
         }
-   // CÁLCULO E FILTRAGEM DO RPM
-        
-        if (flag_medir_rpm) {
-            flag_medir_rpm = 0;
+
+   // CÁLCULO E FILTRAGEM DO RPM 
+        if (flag_medir_rpm) { //flag=1 
+            flag_medir_rpm = 0; //volta a zero
             
             //cálculo do RPM
-            rpm_medido = (pulsos_ultimo_periodo * 60UL) / PULSOS_POR_VOLTA;
-            rpm_medido = filtrar_medida_rpm(rpm_medido);
+            rpm_medido = (pulsos_ultimo_periodo * 60) / PULSOS_POR_VOLTA;  //multiplica por 60 para converter para minutos e divide pelos pulsos por volta, no caso é 1
+            rpm_medido = filtrar_medida_rpm(rpm_medido); //pega as últimas 4 medições e tira a média
             
             //Envio periódico de informações
-            static uint8_t contador_exibicao = 0;
-            if (++contador_exibicao >= 1) {  // A cada segundo
-                contador_exibicao = 0;
+           /*/ static uint8_t contador_exibicao = 0;
+            if (++contador_exibicao >= 1) {  //cada vez que calcula o rpm (a cada segundo) vai ser exibido no monitor
+                contador_exibicao = 0;*/
                 enviaMensagem("PWM: ");
                 tranformaNum(vel_atual);     
                 enviaMensagem("% | RPM: ");
                 tranformaNum(rpm_medido);        
                 enviaMensagem("\r\n");
-            }
+            
         }
         
         //  CONTROLE SUAVE DE vel
         static uint16_t temporizador_rampa = 0;
         
-        if (temporizador_rampa >= 50) {  // A cada 50ms
-            temporizador_rampa = 0;
+        if (temporizador_rampa >= 50) {  //verifica se passaram 50ms ou mais e se sim ajusta a velocidade
+            temporizador_rampa = 0;     //reseta para contar mais 50ms
             
             //Controle de aceleração (não muda bruscamente)
-            if (vel_atual < vel_desejada) {
-                vel_atual++;  // Acelera gradualmente
+            if (vel_atual < vel_desejada) { 
+                vel_atual++;  //a velocidade atual é incrmentada e acelera gradualmente
             } else if (vel_atual > vel_desejada) {
-                vel_atual--;  // Desacelera gradualmente
+                vel_atual--;  //Desacelera gradualmente
             }
             
             // Aplica nova vel ao motor
